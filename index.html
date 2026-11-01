@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Tenis 1976</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap">
+<style>
+/* Layout: one screen — a CRT "television" frame holding the court canvas, controls under it */
+:root{
+  --void:#050605;      /* room around the TV */
+  --tube:#0b0d0b;      /* screen glass */
+  --phosphor:#eef3ea;  /* white-green phosphor */
+  --dim:#7f8a7c;       /* secondary text */
+  --bezel:#1c1f1b;     /* plastic frame */
+  --wood:#3a2a1c;      /* walnut veneer of the console */
+  --pixel:"Silkscreen","Courier New",ui-monospace,monospace;
+  color-scheme:dark;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--void);color:var(--phosphor);font-family:var(--pixel);
+  overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  box-sizing:border-box;
+}
+.app{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding-block:10px;box-sizing:border-box}
+.tv{
+  position:relative;flex:1 1 auto;min-height:0;width:100%;
+  display:flex;align-items:center;justify-content:center;
+}
+.screen{
+  position:relative;height:100%;max-height:100%;aspect-ratio:3/4;max-width:100%;
+  background:var(--tube);border-radius:18px;
+  border:10px solid var(--bezel);
+  box-shadow:0 0 0 3px var(--wood),0 0 60px rgba(200,255,200,.06),inset 0 0 60px rgba(0,0,0,.9);
+  overflow:hidden;box-sizing:border-box;
+}
+canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges;filter:drop-shadow(0 0 3px rgba(220,255,220,.55))}
+.screen::after{ /* scanlines + vignette */
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.28) 2px 3px),
+             radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.55) 100%);
+}
+.overlay{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:18px;text-align:center;padding:16px;background:rgba(5,6,5,.72);z-index:2;
+}
+.overlay h1{font-size:clamp(28px,8vw,46px);font-weight:700;margin:0;letter-spacing:.06em;line-height:1}
+.overlay p{margin:0;color:var(--dim);font-size:12px;letter-spacing:.08em;line-height:1.6;max-width:30ch}
+.overlay .big{color:var(--phosphor);font-size:clamp(20px,6vw,30px)}
+.menu{display:flex;flex-direction:column;gap:10px;width:min(240px,80%)}
+button{
+  font-family:var(--pixel);font-size:14px;letter-spacing:.1em;text-transform:uppercase;
+  background:transparent;color:var(--phosphor);border:3px solid var(--phosphor);
+  padding:10px 12px;cursor:pointer;border-radius:0;
+}
+button:hover,button:focus-visible{background:var(--phosphor);color:var(--tube);outline:none}
+.seg{display:flex;gap:0}
+.seg button{flex:1;font-size:11px;padding:7px 4px;border-width:2px}
+.seg button+button{border-left-width:0}
+.seg button[aria-pressed="true"]{background:var(--phosphor);color:var(--tube)}
+.bar{display:flex;gap:10px;flex:0 0 auto;align-items:center;flex-wrap:wrap;justify-content:center}
+.bar button{font-size:11px;padding:6px 10px;border-width:2px;color:var(--dim);border-color:var(--dim)}
+.bar button:hover,.bar button:focus-visible{background:var(--dim);color:var(--void)}
+.hint{color:var(--dim);font-size:10px;letter-spacing:.08em}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){canvas{filter:none}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="tv">
+    <div class="screen" id="screen">
+      <canvas id="c" width="240" height="320" aria-label="Boisko do tenisa"></canvas>
+
+      <div class="overlay" id="menu">
+        <h1>TENIS</h1>
+        <p>Odbijaj kwadracik paletką. Kto pierwszy zdobędzie 11 punktów, wygrywa.</p>
+        <div class="menu">
+          <button id="b1">1 gracz</button>
+          <button id="b2">2 graczy</button>
+          <div class="seg" role="group" aria-label="Poziom">
+            <button data-lvl="0" aria-pressed="false">łatwy</button>
+            <button data-lvl="1" aria-pressed="true">średni</button>
+            <button data-lvl="2" aria-pressed="false">trudny</button>
+          </div>
+        </div>
+        <p id="ctrlHint">Przesuwaj palcem lub myszą · klawisze ← → (dół), A D (góra)</p>
+      </div>
+
+      <div class="overlay" id="pause" hidden>
+        <p class="big">PAUZA</p>
+        <div class="menu">
+          <button id="resume">Graj dalej</button>
+          <button id="toMenu">Menu</button>
+        </div>
+      </div>
+
+      <div class="overlay" id="over" hidden>
+        <p class="big" id="winner">WYGRANA</p>
+        <p id="final"></p>
+        <div class="menu">
+          <button id="again">Jeszcze raz</button>
+          <button id="toMenu2">Menu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="bar">
+    <button id="pauseBtn">Pauza</button>
+    <button id="soundBtn" aria-pressed="true">Dźwięk: wł.</button>
+    <span class="hint">Spacja = pauza</span>
+  </div>
+</div>
+
+<script>
+(()=>{
+const W=240,H=320,PW=40,PH=6,BS=6,WIN=11,SW=8,GRIP=15;
+const cv=document.getElementById('c'),g=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+const FG='#eef3ea';
+
+// 3x5 pixel font for score digits
+const DIG=['111101101101111','010110010010111','111001111100111','111001111001111','101101111001001',
+           '111100111001111','111100111101111','111001001001001','111101111101111','111101111001111'];
+function digit(n,x,y,s){const p=DIG[n];for(let i=0;i<15;i++)if(p[i]==='1')g.fillRect(x+(i%3)*s,y+((i/3)|0)*s,s,s);}
+function number(n,x,y,s){const t=String(n);t.split('').forEach((d,i)=>digit(+d,x+i*4*s,y,s));}
+
+let mode=1,level=1,state='menu',sound=true;
+const top={x:W/2-PW/2,y:GRIP,score:0,target:null};
+const bot={x:W/2-PW/2,y:H-GRIP-PH,score:0,target:null};
+const ball={x:0,y:0,vx:0,vy:0,speed:0,wait:0};
+const keys={};
+
+// ---- sound: square-wave beeps like the original chips ----
+let ac=null;
+function beep(f,d){ if(!sound) return; try{
+  ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+  const o=ac.createOscillator(),v=ac.createGain();
+  o.type='square';o.frequency.value=f;v.gain.value=.06;
+  o.connect(v);v.connect(ac.destination);o.start();o.stop(ac.currentTime+d);
+}catch(e){} }
+
+function serve(dir){
+  ball.x=W/2-BS/2;ball.y=H/2-BS/2;ball.speed=[2.2,2.6,3][level];
+  const a=(Math.random()*.8-.4);
+  ball.vx=Math.sin(a)*ball.speed;ball.vy=Math.cos(a)*ball.speed*dir;
+  ball.wait=50;
+}
+function start(m){
+  mode=m;top.score=bot.score=0;top.x=bot.x=W/2-PW/2;
+  serve(Math.random()<.5?1:-1);state='play';
+  $('menu').hidden=$('over').hidden=$('pause').hidden=true;
+}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+
+function hit(p,dir){
+  const rel=((ball.x+BS/2)-(p.x+PW/2))/(PW/2+BS/2);   // -1..1
+  ball.speed=Math.min(ball.speed+.18,7);
+  const ang=rel*1.05;                                 // up to ~60°
+  ball.vx=Math.sin(ang)*ball.speed;ball.vy=Math.cos(ang)*ball.speed*dir;
+  beep(480,.05);
+}
+
+function update(){
+  // player input
+  const ks=5;
+  if(keys.ArrowLeft) bot.x-=ks; if(keys.ArrowRight) bot.x+=ks;
+  if(mode===2){ if(keys.a) top.x-=ks; if(keys.d) top.x+=ks; }
+  if(bot.target!=null) bot.x+= (bot.target-PW/2-bot.x)*.5;
+  if(mode===2&&top.target!=null) top.x+= (top.target-PW/2-top.x)*.5;
+
+  // computer
+  if(mode===1){
+    const maxS=[1.9,2.9,4.2][level], err=[18,9,3][level];
+    let aim=W/2;
+    if(ball.vy<0) aim=ball.x+BS/2+Math.sin(ball.y*.05)*err;
+    top.x+=clamp(aim-(top.x+PW/2),-maxS,maxS);
+  }
+  top.x=clamp(top.x,0,W-PW);bot.x=clamp(bot.x,0,W-PW);
+
+  if(ball.wait>0){ball.wait--;return;}
+  ball.x+=ball.vx;ball.y+=ball.vy;
+
+  if(ball.x<=0){ball.x=0;ball.vx=Math.abs(ball.vx);beep(240,.03);}
+  if(ball.x+BS>=W){ball.x=W-BS;ball.vx=-Math.abs(ball.vx);beep(240,.03);}
+
+  if(ball.vy>0&&ball.y+BS>=bot.y&&ball.y+BS<=bot.y+PH+ball.vy&&ball.x+BS>=bot.x&&ball.x<=bot.x+PW){ball.y=bot.y-BS;hit(bot,-1);}
+  if(ball.vy<0&&ball.y<=top.y+PH&&ball.y>=top.y+ball.vy-1&&ball.x+BS>=top.x&&ball.x<=top.x+PW){ball.y=top.y+PH;hit(top,1);}
+
+  if(ball.y>H){top.score++;point(-1);}
+  else if(ball.y+BS<0){bot.score++;point(1);}
+}
+function point(dir){
+  beep(140,.25);
+  if(top.score>=WIN||bot.score>=WIN){
+    state='over';
+    const botWon=bot.score>top.score;
+    $('winner').textContent= mode===1 ? (botWon?'WYGRAŁEŚ!':'KOMPUTER WYGRAŁ') : (botWon?'WYGRAŁ DÓŁ':'WYGRAŁA GÓRA');
+    $('final').textContent=`Wynik ${bot.score} : ${top.score}`;
+    $('over').hidden=false;
+  } else serve(dir);
+}
+
+function draw(){
+  g.fillStyle='#000';g.fillRect(0,0,W,H);
+  g.fillStyle=FG;
+  // net: dashed line across the middle
+  for(let x=2;x<W;x+=12) g.fillRect(x,H/2-1,6,3);
+  // scores
+  number(top.score,W-44,H/2-30,4);
+  number(bot.score,W-44,H/2+10,4);
+  // paddles shaped like T: bar + handle (stem) toward the player's edge
+  const tx=Math.round(top.x),bx=Math.round(bot.x);
+  g.fillRect(tx,top.y,PW,PH);
+  g.fillRect(tx+PW/2-SW/2,0,SW,top.y);
+  g.fillRect(bx,bot.y,PW,PH);
+  g.fillRect(bx+PW/2-SW/2,bot.y+PH,SW,H-bot.y-PH);
+  // ball (blinks while waiting to serve)
+  if(state!=='menu'&&!(ball.wait>0&&(ball.wait>>3)%2))
+    g.fillRect(Math.round(ball.x),Math.round(ball.y),BS,BS);
+}
+
+// attract mode in menu: ball bounces on its own
+function attract(){
+  if(ball.speed===0) serve(1);
+  top.x+=clamp(ball.x-top.x-PW/2,-3,3);bot.x+=clamp(ball.x-bot.x-PW/2,-3,3);
+  top.x=clamp(top.x,0,W-PW);bot.x=clamp(bot.x,0,W-PW);
+  if(ball.wait>0){ball.wait--;return;}
+  ball.x+=ball.vx;ball.y+=ball.vy;
+  if(ball.x<=0||ball.x+BS>=W) ball.vx*=-1;
+  if(ball.y+BS>=bot.y&&ball.vy>0) ball.vy*=-1;
+  if(ball.y<=top.y+PH&&ball.vy<0) ball.vy*=-1;
+}
+
+function loop(){
+  if(state==='play') update(); else if(state==='menu') attract();
+  draw(); requestAnimationFrame(loop);
+}
+
+// ---- input: pointer (touch / mouse), multi-touch for 2 players ----
+const pointers=new Map();
+function toGame(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H};}
+function applyPointers(){
+  bot.target=null; top.target=null;
+  for(const p of pointers.values()){
+    if(mode===2&&p.y<H/2) top.target=p.x; else bot.target=p.x;
+  }
+}
+const scr=$('screen');
+scr.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;pointers.set(e.pointerId,toGame(e));applyPointers();});
+scr.addEventListener('pointermove',e=>{
+  if(e.pointerType==='mouse'&&!pointers.has(e.pointerId)){ if(state==='play'){const p=toGame(e); if(mode===2&&p.y<H/2) top.target=p.x; else bot.target=p.x;} return; }
+  if(pointers.has(e.pointerId)){pointers.set(e.pointerId,toGame(e));applyPointers();}
+});
+['pointerup','pointercancel'].forEach(t=>scr.addEventListener(t,e=>{if(e.pointerType==='mouse')return;pointers.delete(e.pointerId);applyPointers();}));
+scr.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'){bot.target=null;top.target=null;}});
+
+window.addEventListener('keydown',e=>{
+  const k=e.key.length===1?e.key.toLowerCase():e.key;
+  if(['ArrowLeft','ArrowRight'].includes(k)){bot.target=null;e.preventDefault();}
+  if(k==='a'||k==='d') top.target=null;
+  keys[k]=true;
+  if(k===' '){e.preventDefault(); togglePause();}
+});
+window.addEventListener('keyup',e=>{const k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=false;});
+
+function togglePause(){
+  if(state==='play'){state='pause';$('pause').hidden=false;}
+  else if(state==='pause'){state='play';$('pause').hidden=true;}
+}
+function toMenu(){state='menu';ball.speed=0;$('pause').hidden=$('over').hidden=true;$('menu').hidden=false;}
+
+$('b1').onclick=()=>start(1);
+$('b2').onclick=()=>start(2);
+$('again').onclick=()=>start(mode);
+$('resume').onclick=togglePause;
+$('toMenu').onclick=toMenu;$('toMenu2').onclick=toMenu;
+$('pauseBtn').onclick=togglePause;
+$('soundBtn').onclick=e=>{sound=!sound;e.currentTarget.textContent='Dźwięk: '+(sound?'wł.':'wył.');e.currentTarget.setAttribute('aria-pressed',sound);};
+document.querySelectorAll('[data-lvl]').forEach(b=>b.onclick=()=>{
+  level=+b.dataset.lvl;
+  document.querySelectorAll('[data-lvl]').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  try{localStorage.setItem('pong-lvl',level);}catch(e){}
+});
+try{const l=localStorage.getItem('pong-lvl');if(l!==null){level=+l;document.querySelectorAll('[data-lvl]').forEach(x=>x.setAttribute('aria-pressed',+x.dataset.lvl===level));}}catch(e){}
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='play')togglePause();});
+
+loop();
+})();
+</script>
+</body>
+</html>
